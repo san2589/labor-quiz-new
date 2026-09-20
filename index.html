@@ -32,7 +32,7 @@
         .opt.wrong { background:rgba(251,113,133,0.3) !important; border-color:#fb7185 !important; color:#fda4af; }
         
         /* 題號網格優化 - 5欄排列 */
-        .nav-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin-top:10px; }
+        .nav-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin-top:10px; max-height: 400px; overflow-y: auto; padding-right: 5px; }
         .dot { background:#0f172a; border:1px solid #334155; text-align:center; padding:12px 0; border-radius:8px; cursor:pointer; font-size:16px; font-weight: bold; }
         .dot.active { border-color:var(--brand); color:var(--brand); border-width: 2px; }
         .dot.score-correct { background:#065f46 !important; border-color:#10b981 !important; color:white; }
@@ -53,12 +53,22 @@
         
         <!-- 題庫類型選擇器 -->
         <div class="quiz-type-selector">
-            <label for="quizTypeSelect">🎯 請選擇題庫類型：</label>
+            <label for="quizTypeSelect">🎯 請選擇題型類別：</label>
             <select id="quizTypeSelect">
-                <option value="all">🔘 全部題目</option>
+                <option value="all">🔘 全部題型</option>
                 <option value="choice">🔘 選擇題專區</option>
                 <option value="tf">🔘 是非題專區</option>
                 <option value="tf_choice">🔘 是非 + 選擇</option>
+            </select>
+        </div>
+
+        <!-- 題數選擇器 -->
+        <div class="quiz-type-selector">
+            <label for="quizCountSelect">🔢 請選擇測驗題數：</label>
+            <select id="quizCountSelect">
+                <option value="all">🔥 [全部題目] 全部刷一遍</option>
+                <option value="50" selected>⚡ 隨機 50 題 (標準模擬考)</option>
+                <option value="100">⚡ 隨機 100 題</option>
             </select>
         </div>
 
@@ -102,7 +112,7 @@ async function fetchAndParse(name) {
     document.getElementById('status').textContent = "讀取中，請稍候...";
     try {
         const res = await fetch(name + "?v=" + Date.now());
-        const data = await res.json(); // 改用正規標準 JSON 解析
+        const data = await res.json();
         
         let rawList = Array.isArray(data) ? data : (data.questions || []);
         let temp = [];
@@ -164,8 +174,17 @@ async function fetchAndParse(name) {
             return;
         }
 
-        // 隨機抽樣最多 50 題
-        bank = filtered.sort(() => Math.random() - 0.5).slice(0, 50);
+        // 根據「測驗題數選單」決定抽樣數量
+        const countMode = document.getElementById('quizCountSelect').value;
+        if (countMode === 'all') {
+            // [全部題目] 模式：載入所有符合篩選條件的題目
+            bank = filtered;
+        } else {
+            // 隨機抽樣指定題數（50 或 100 題）
+            const maxCount = parseInt(countMode, 10);
+            bank = filtered.sort(() => Math.random() - 0.5).slice(0, maxCount);
+        }
+
         current = 0; answers = {}; revealed = {}; isFinished = false;
         document.getElementById('setupBox').style.display = "none";
         document.getElementById('quizBox').style.display = "block";
