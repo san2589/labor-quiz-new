@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>iPAS 模擬考 - 手機優化版</title>
+    <style>
+        :root { --bg:#0f172a; --card:#1e293b; --brand:#2dd4bf; --text:#f1f5f9; }
+        body { background:var(--bg); color:var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:0; padding:15px; line-height:1.5; }
+        .wrap { max-width:800px; margin:0 auto; }
+        .card { background:var(--card); padding:20px; border-radius:16px; border:1px solid #334155; margin-bottom:15px; }
+        
+        /* 標題與狀態資訊 */
+        h2 { color:var(--brand); margin:0 0 10px 0; font-size: 1.5rem; }
+        .status-msg { font-size: 16px; color: #94a3b8; margin-bottom: 10px; }
+
+        /* 選單與按鈕 */
+        .quiz-type-selector { margin: 15px 0; }
+        .quiz-type-selector label { font-weight: bold; font-size: 16px; display: block; margin-bottom: 8px; color: var(--brand); }
+        .quiz-type-selector select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #334155; font-size: 16px; background-color: #0f172a; color: #fff; outline: none; }
+        .btn { background:#334155; color:white; border:none; padding:12px 15px; border-radius:10px; cursor:pointer; font-weight:bold; font-size: 16px; }
+        .btn-active { background:var(--brand) !important; color:#0f172a !important; }
+        .btn-primary { background:var(--brand); color:#0f172a; width: 100%; margin-top: 15px; font-size: 20px; padding: 15px; }
+        
+        /* 題目顯示加強 */
+        h3 { font-size: 1.3rem; line-height: 1.4; margin-top: 5px; color: #fff; border-bottom: 1px solid #334155; padding-bottom: 15px; }
+        
+        /* 選項按鈕加強 - 適合大拇指點擊 */
+        .opt { width:100%; text-align:left; padding:18px; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; margin-bottom:12px; cursor:pointer; font-size: 18px; font-weight: 500; }
+        .opt.selected { border-color:var(--brand); background:rgba(45,212,191,0.1); }
+        .opt.correct { background:rgba(34,197,94,0.3) !important; border-color:#22c55e !important; color:#4ade80; }
+        .opt.wrong { background:rgba(251,113,133,0.3) !important; border-color:#fb7185 !important; color:#fda4af; }
+        
+        /* 題號網格優化 - 5欄排列 */
+        .nav-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin-top:10px; }
+        .dot { background:#0f172a; border:1px solid #334155; text-align:center; padding:12px 0; border-radius:8px; cursor:pointer; font-size:16px; font-weight: bold; }
+        .dot.active { border-color:var(--brand); color:var(--brand); border-width: 2px; }
+        .dot.score-correct { background:#065f46 !important; border-color:#10b981 !important; color:white; }
+        .dot.score-wrong { background:#7f1d1d !important; border-color:#ef4444 !important; color:white; }
+        .dot.done { background:#475569; }
+
+        /* 解析盒 */
+        .exp-box { padding:15px; background:rgba(45,212,191,0.1); border-left:5px solid var(--brand); margin-top:20px; border-radius:8px; font-size: 17px; }
+        
+        /* 分數看板 */
+        .result-header { text-align: center; padding: 25px; background: rgba(45,212,191,0.1); border-radius: 16px; margin-bottom: 15px; border: 2px solid var(--brand); }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card" id="setupBox">
+        <h2>iPAS 模擬考系統</h2>
+        
+        <!-- 題庫類型選擇器 -->
+        <div class="quiz-type-selector">
+            <label for="quizTypeSelect">🎯 請選擇題庫類型：</label>
+            <select id="quizTypeSelect">
+                <option value="all">🔘 全部題目</option>
+                <option value="choice">🔘 選擇題專區</option>
+                <option value="tf">🔘 是非題專區</option>
+                <option value="tf_choice">🔘 是非 + 選擇</option>
+            </select>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn btn-active" onclick="fetchAndParse('labor_questions.json')">載入勞動法規 (labor_questions.json)</button>
+            <button class="btn btn-active" onclick="fetchAndParse('ipas_questions_ai.json')">載入 AI 規劃師</button>
+            <button class="btn btn-active" onclick="fetchAndParse('ipas_questions_all.json')">載入全部題庫</button>
+        </div>
+        <div id="status" class="status-msg" style="margin-top:15px;">請選擇題庫載入練習</div>
+    </div>
+
+    <div id="quizBox" style="display:none;">
+        <div id="scoreBoard" class="result-header" style="display:none;">
+            <div style="font-size: 1.3rem;">測驗結束</div>
+            <div style="font-size: 3rem; font-weight: bold; color: var(--brand);" id="finalScoreText">0</div>
+            <div id="scoreDetailText" style="font-size: 18px;">正確 0 | 錯誤 0</div>
+            <button class="btn" style="margin-top:15px; background:var(--brand); color:#000; width:80%;" onclick="location.reload()">重新測驗</button>
+        </div>
+
+        <div class="card">
+            <div id="qArea"></div>
+            <div style="display:flex; justify-content:space-between; margin-top:20px; gap:10px;">
+                <button class="btn" style="flex:1" onclick="move(-1)">← 上一題</button>
+                <button class="btn" style="flex:1" onclick="revealed[current]=true;render()">看解析</button>
+                <button class="btn" style="flex:1" onclick="move(1)">下一題 →</button>
+            </div>
+            <button class="btn btn-primary" id="finishBtn" onclick="submitExam()">送出交卷</button>
+        </div>
+
+        <div class="card">
+            <div style="margin-bottom:12px; font-weight:bold; font-size: 18px;">題目導覽 (紅綠燈檢討)</div>
+            <div id="navGrid" class="nav-grid"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let bank = [], current = 0, answers = {}, revealed = {}, isFinished = false;
+
+async function fetchAndParse(name) {
+    document.getElementById('status').textContent = "讀取中，請稍候...";
+    try {
+        const res = await fetch(name + "?v=" + Date.now());
+        const text = await res.text();
+        const blocks = text.split(/\{(?=\s*"(?:id|q|question)")/);
+        let temp = [];
+
+        blocks.forEach(block => {
+            const find = (key) => {
+                const r = new RegExp(`"${key}"\\s*:\\s*"([\\s\\S]*?)"(?=[\\s\\n]*,|[\\s\\n]*\\})`);
+                const m = block.match(r);
+                return m ? m[1].replace(/\\"/g, '"').trim() : null;
+            };
+            
+            // 自動擷取 type 欄位
+            let typeM = block.match(/"type"\s*:\s*"([^"]+)"/);
+            let explicitType = typeM ? typeM[1] : null;
+
+            let q = find("question") || find("q");
+            if (!q) return;
+            let item = { q: q, opts: [], ans: -1, exp: find("analysis") || find("explanation") || find("e") || "無解析", type: explicitType };
+            
+            if (block.includes('"options"')) {
+                // 處理選項陣列
+                const optsM = block.match(/"options"\s*:\s*\[([\s\S]*?)\]/);
+                if (optsM) {
+                    item.opts = optsM[1].split(/",|"/).map(s => s.trim().replace(/[\[\]"]/g, '')).filter(s => s.length > 0);
+                } else {
+                    item.opts = [find("A"), find("B"), find("C"), find("D")].filter(o => o !== null);
+                }
+                
+                // 處理答案 (數字或字母)
+                const ansVal = find("answer");
+                if (ansVal !== null) {
+                    if (!isNaN(ansVal)) item.ans = parseInt(ansVal) - 1; // 數字 1-4 轉為 0-3
+                    else item.ans = {"A":0,"B":1,"C":2,"D":3}[ansVal.toUpperCase()];
+                }
+            } else {
+                const aM = block.match(/"a"\s*:\s*\[([\s\S]*?)\]/);
+                if (aM) item.opts = aM[1].split(/",|"/).map(s => s.trim().replace(/[\[\]"]/g, '')).filter(s => s.length > 0);
+                const cM = block.match(/"c"\s*:\s*"?(\d)"?/);
+                if (cM) item.ans = parseInt(cM[1]) - 1;
+            }
+
+            // 判斷題目類型 (若 JSON 沒標註 type，則依選項個數自動判斷)
+            if (!item.type) {
+                item.type = (item.opts.length === 2) ? 'tf' : 'choice';
+            }
+
+            if (item.q && item.opts.length >= 2 && item.ans !== undefined && item.ans !== -1) temp.push(item);
+        });
+
+        // 根據選單類型過濾題目
+        const selectedType = document.getElementById('quizTypeSelect').value;
+        let filtered = temp.filter(item => {
+            switch (selectedType) {
+                case 'choice':
+                    return item.type === 'choice';
+                case 'tf':
+                    return item.type === 'tf';
+                case 'tf_choice':
+                    return item.type === 'tf' || item.type === 'choice';
+                case 'all':
+                default:
+                    return true;
+            }
+        });
+
+        if (filtered.length === 0) {
+            alert("目前選取的類型無可用題目！");
+            document.getElementById('status').textContent = "請選擇其他題庫或類型";
+            return;
+        }
+
+        // 隨機抽樣最多 50 題
+        bank = filtered.sort(() => Math.random() - 0.5).slice(0, 50);
+        current = 0; answers = {}; revealed = {}; isFinished = false;
+        document.getElementById('setupBox').style.display = "none";
+        document.getElementById('quizBox').style.display = "block";
+        render();
+    } catch (e) { alert("讀取錯誤: " + e.message); }
+}
+
+function render() {
+    const item = bank[current];
+    const showResult = isFinished || revealed[current];
+    let html = `<h3>Q${current + 1}. ${item.q}</h3>`;
+
+    item.opts.forEach((opt, i) => {
+        let cls = "opt";
+        if (answers[current] === i) cls += " selected";
+        if (showResult) {
+            if (i === item.ans) cls += " correct";
+            else if (answers[current] === i) cls += " wrong";
+        }
+        html += `<button class="${cls}" onclick="selectOpt(${i})">${opt}</button>`;
+    });
+
+    if (showResult) html += `<div class="exp-box"><b>💡 解析：</b><br>${item.exp}</div>`;
+    document.getElementById('qArea').innerHTML = html;
+    
+    document.getElementById('navGrid').innerHTML = bank.map((it, i) => {
+        let cls = "dot";
+        if (i === current) cls += " active";
+        if (isFinished) {
+            cls += (answers[i] === it.ans) ? " score-correct" : " score-wrong";
+        } else if (answers[i] !== undefined) {
+            cls += " done";
+        }
+        return `<div class="${cls}" onclick="current=${i};render()">${i+1}</div>`;
+    }).join('');
+    window.scrollTo(0, 0);
+}
+
+function selectOpt(i) {
+    if (isFinished) return;
+    answers[current] = i;
+    render();
+}
+
+function move(step) {
+    let next = current + step;
+    if (next >= 0 && next < bank.length) { current = next; render(); }
+}
+
+function submitExam() {
+    if (!confirm("確定交卷嗎？")) return;
+    isFinished = true;
+    let correct = 0;
+    bank.forEach((it, i) => { if (answers[i] === it.ans) correct++; });
+    const score = Math.round((correct / bank.length) * 100);
+    document.getElementById('scoreBoard').style.display = "block";
+    document.getElementById('finalScoreText').textContent = score + " 分";
+    document.getElementById('scoreDetailText').textContent = `答對：${correct} 題 | 答錯：${bank.length - correct} 題`;
+    document.getElementById('finishBtn').style.display = "none";
+    current = 0;
+    render();
+}
+</script>
+</body>
+</html>
