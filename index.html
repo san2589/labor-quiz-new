@@ -102,73 +102,64 @@ async function fetchAndParse(name) {
     document.getElementById('status').textContent = "讀取中，請稍候...";
     try {
         const res = await fetch(name + "?v=" + Date.now());
-        const text = await res.text();
-        const blocks = text.split(/\{(?=\s*"(?:id|q|question)")/);
+        const data = await res.json(); // 改用正規標準 JSON 解析
+        
+        let rawList = Array.isArray(data) ? data : (data.questions || []);
         let temp = [];
 
-        blocks.forEach(block => {
-            const find = (key) => {
-                const r = new RegExp(`"${key}"\\s*:\\s*"([\\s\\S]*?)"(?=[\\s\\n]*,|[\\s\\n]*\\})`);
-                const m = block.match(r);
-                return m ? m[1].replace(/\\"/g, '"').trim() : null;
-            };
-            
-            // 自動擷取 type 欄位
-            let typeM = block.match(/"type"\s*:\s*"([^"]+)"/);
-            let explicitType = typeM ? typeM[1] : null;
+        rawList.forEach(raw => {
+            let qText = raw.question || raw.q;
+            if (!qText) return;
 
-            let q = find("question") || find("q");
-            if (!q) return;
-            let item = { q: q, opts: [], ans: -1, exp: find("analysis") || find("explanation") || find("e") || "無解析", type: explicitType };
-            
-            if (block.includes('"options"')) {
-                // 處理選項陣列
-                const optsM = block.match(/"options"\s*:\s*\[([\s\S]*?)\]/);
-                if (optsM) {
-                    item.opts = optsM[1].split(/",|"/).map(s => s.trim().replace(/[\[\]"]/g, '')).filter(s => s.length > 0);
-                } else {
-                    item.opts = [find("A"), find("B"), find("C"), find("D")].filter(o => o !== null);
-                }
-                
-                // 處理答案 (數字或字母)
-                const ansVal = find("answer");
-                if (ansVal !== null) {
-                    if (!isNaN(ansVal)) item.ans = parseInt(ansVal) - 1; // 數字 1-4 轉為 0-3
-                    else item.ans = {"A":0,"B":1,"C":2,"D":3}[ansVal.toUpperCase()];
-                }
-            } else {
-                const aM = block.match(/"a"\s*:\s*\[([\s\S]*?)\]/);
-                if (aM) item.opts = aM[1].split(/",|"/).map(s => s.trim().replace(/[\[\]"]/g, '')).filter(s => s.length > 0);
-                const cM = block.match(/"c"\s*:\s*"?(\d)"?/);
-                if (cM) item.ans = parseInt(cM[1]) - 1;
+            let opts = [];
+            if (Array.isArray(raw.options)) {
+                opts = raw.options;
+            } else if (Array.isArray(raw.a)) {
+                opts = raw.a;
+            } else if (raw.A || raw.B) {
+                opts = [raw.A, raw.B, raw.C, raw.D].filter(Boolean);
             }
 
-            // 判斷題目類型 (若 JSON 沒標註 type，則依選項個數自動判斷)
-            if (!item.type) {
-                item.type = (item.opts.length === 2) ? 'tf' : 'choice';
+            let ans = -1;
+            let rawAns = raw.answer !== undefined ? raw.answer : raw.c;
+            if (rawAns !== undefined && rawAns !== null) {
+                if (typeof rawAns === 'number') {
+                    ans = rawAns > 0 ? rawAns - 1 : rawAns;
+                } else if (typeof rawAns === 'string') {
+                    let upper = rawAns.trim().toUpperCase();
+                    if (!isNaN(upper)) {
+                        ans = parseInt(upper) - 1;
+                    } else if (["A", "B", "C", "D"].includes(upper)) {
+                        ans = {"A":0, "B":1, "C":2, "D":3}[upper];
+                    }
+                }
             }
 
-            if (item.q && item.opts.length >= 2 && item.ans !== undefined && item.ans !== -1) temp.push(item);
+            let type = raw.type;
+            if (!type) {
+                type = (opts.length === 2) ? 'tf' : 'choice';
+            }
+
+            let exp = raw.analysis || raw.explanation || raw.e || "無解析";
+
+            if (qText && opts.length >= 2 && ans >= 0) {
+                temp.push({ q: qText, opts: opts, ans: ans, exp: exp, type: type });
+            }
         });
 
         // 根據選單類型過濾題目
         const selectedType = document.getElementById('quizTypeSelect').value;
         let filtered = temp.filter(item => {
             switch (selectedType) {
-                case 'choice':
-                    return item.type === 'choice';
-                case 'tf':
-                    return item.type === 'tf';
-                case 'tf_choice':
-                    return item.type === 'tf' || item.type === 'choice';
-                case 'all':
-                default:
-                    return true;
+                case 'choice': return item.type === 'choice';
+                case 'tf': return item.type === 'tf';
+                case 'tf_choice': return item.type === 'tf' || item.type === 'choice';
+                case 'all': default: return true;
             }
         });
 
         if (filtered.length === 0) {
-            alert("目前選取的類型無可用題目！");
+            alert("題庫解析成功，但選取的類型無可用題目！");
             document.getElementById('status').textContent = "請選擇其他題庫或類型";
             return;
         }
@@ -183,6 +174,7 @@ async function fetchAndParse(name) {
 }
 
 function render() {
+    if (bank.length === 0) return;
     const item = bank[current];
     const showResult = isFinished || revealed[current];
     let html = `<h3>Q${current + 1}. ${item.q}</h3>`;
