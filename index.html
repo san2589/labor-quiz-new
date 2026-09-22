@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iPAS 模擬考 - 手機優化版</title>
+    <title>iPAS / 採購班模擬考 - 手機優化版</title>
     <style>
         :root { --bg:#0f172a; --card:#1e293b; --brand:#2dd4bf; --text:#f1f5f9; }
         body { background:var(--bg); color:var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin:0; padding:15px; line-height:1.5; }
@@ -49,25 +49,25 @@
 <body>
 <div class="wrap">
     <div class="card" id="setupBox">
-        <h2>iPAS 模擬考系統</h2>
+        <h2>iPAS / 採購班模擬考系統</h2>
         
-        <!-- 題庫類型選擇器 -->
+        <!-- 題型選擇器 -->
         <div class="quiz-type-selector">
             <label for="quizTypeSelect">🎯 請選擇題型類別：</label>
             <select id="quizTypeSelect">
-                <option value="all">🔘 全部題型</option>
+                <option value="all">🔘 全部題型 (是非 + 選擇)</option>
                 <option value="choice">🔘 選擇題專區</option>
                 <option value="tf">🔘 是非題專區</option>
-                <option value="tf_choice">🔘 是非 + 選擇</option>
             </select>
         </div>
 
-        <!-- 題數選擇器 -->
+        <!-- 題數與模式選擇器 -->
         <div class="quiz-type-selector">
-            <label for="quizCountSelect">🔢 請選擇測驗題數：</label>
+            <label for="quizCountSelect">🔢 請選擇測驗題數/模式：</label>
             <select id="quizCountSelect">
-                <option value="all">🔥 [全部題目] 全部刷一遍</option>
-                <option value="50" selected>⚡ 隨機 50 題 (標準模擬考)</option>
+                <option value="procurement_std" selected>🏛️ 採購班標準考 (66題是非 + 132題選擇，共198題)</option>
+                <option value="all">🔥 [全部題目] 完整刷一遍</option>
+                <option value="50">⚡ 隨機 50 題</option>
                 <option value="100">⚡ 隨機 100 題</option>
             </select>
         </div>
@@ -133,7 +133,6 @@ async function fetchAndParse(name) {
             let ans = -1;
             let rawAns = raw.answer !== undefined ? raw.answer : raw.c;
             
-            // 修正：答案邏輯直接對應 0-based 索引 (0=選項1, 1=選項2, 2=選項3, 3=選項4)
             if (rawAns !== undefined && rawAns !== null) {
                 if (typeof rawAns === 'number') {
                     ans = rawAns;
@@ -159,30 +158,50 @@ async function fetchAndParse(name) {
             }
         });
 
-        // 根據選單類型過濾題目
-        const selectedType = document.getElementById('quizTypeSelect').value;
-        let filtered = temp.filter(item => {
-            switch (selectedType) {
-                case 'choice': return item.type === 'choice';
-                case 'tf': return item.type === 'tf';
-                case 'tf_choice': return item.type === 'tf' || item.type === 'choice';
-                case 'all': default: return true;
-            }
-        });
-
-        if (filtered.length === 0) {
-            alert("題庫解析成功，但選取的類型無可用題目！");
-            document.getElementById('status').textContent = "請選擇其他題庫或類型";
-            return;
-        }
-
-        // 根據「測驗題數選單」決定題數
         const countMode = document.getElementById('quizCountSelect').value;
-        if (countMode === 'all') {
-            bank = filtered;
+
+        if (countMode === 'procurement_std') {
+            // 🏛️ 採購班標準模式：66 題是非題 + 132 題選擇題
+            let tfList = temp.filter(item => item.type === 'tf').sort(() => Math.random() - 0.5);
+            let choiceList = temp.filter(item => item.type === 'choice').sort(() => Math.random() - 0.5);
+
+            let selectedTF = tfList.slice(0, 66);
+            let selectedChoice = choiceList.slice(0, 132);
+
+            bank = [...selectedTF, ...selectedChoice];
+
+            if (bank.length === 0) {
+                alert("題庫中沒有找到有效的題目！");
+                document.getElementById('status').textContent = "請選擇其他題庫";
+                return;
+            }
+
+            if (selectedTF.length < 66 || selectedChoice.length < 132) {
+                alert(`提醒：現有題庫數量不足（是非題 ${selectedTF.length}/66 題，選擇題 ${selectedChoice.length}/132 題），已載入最大可用題數！`);
+            }
         } else {
-            const maxCount = parseInt(countMode, 10);
-            bank = filtered.sort(() => Math.random() - 0.5).slice(0, maxCount);
+            // 根據選單類型過濾題目
+            const selectedType = document.getElementById('quizTypeSelect').value;
+            let filtered = temp.filter(item => {
+                switch (selectedType) {
+                    case 'choice': return item.type === 'choice';
+                    case 'tf': return item.type === 'tf';
+                    case 'all': default: return true;
+                }
+            });
+
+            if (filtered.length === 0) {
+                alert("題庫解析成功，但選取的類型無可用題目！");
+                document.getElementById('status').textContent = "請選擇其他題庫或類型";
+                return;
+            }
+
+            if (countMode === 'all') {
+                bank = filtered;
+            } else {
+                const maxCount = parseInt(countMode, 10);
+                bank = filtered.sort(() => Math.random() - 0.5).slice(0, maxCount);
+            }
         }
 
         current = 0; answers = {}; revealed = {}; isFinished = false;
@@ -196,7 +215,8 @@ function render() {
     if (bank.length === 0) return;
     const item = bank[current];
     const showResult = isFinished || revealed[current];
-    let html = `<h3>Q${current + 1}. ${item.q}</h3>`;
+    const typeLabel = item.type === 'tf' ? '[是非題]' : '[選擇題]';
+    let html = `<h3>Q${current + 1}. <span style="color:var(--brand);">${typeLabel}</span> ${item.q}</h3>`;
 
     item.opts.forEach((opt, i) => {
         let cls = "opt";
@@ -243,7 +263,7 @@ function submitExam() {
     const score = Math.round((correct / bank.length) * 100);
     document.getElementById('scoreBoard').style.display = "block";
     document.getElementById('finalScoreText').textContent = score + " 分";
-    document.getElementById('scoreDetailText').textContent = `答對：${correct} 題 | 答錯：${bank.length - correct} 題`;
+    document.getElementById('scoreDetailText').textContent = `答對：${correct} 題 | 答錯：${bank.length - correct} 題 (總題數：${bank.length} 題)`;
     document.getElementById('finishBtn').style.display = "none";
     current = 0;
     render();
