@@ -65,7 +65,7 @@
         <div class="quiz-type-selector">
             <label for="quizCountSelect">🔢 請選擇測驗題數/模式：</label>
             <select id="quizCountSelect">
-                <option value="procurement_std" selected>🏛️ 採購班標準考 (66題是非 + 132題選擇，共198題)</option>
+                <option value="procurement_std" selected>🏛️ 採購班標準考 (66題是非 + 132題選擇，滿分330分)</option>
                 <option value="all">🔥 [全部題目] 完整刷一遍</option>
                 <option value="50">⚡ 隨機 50 題</option>
                 <option value="100">⚡ 隨機 100 題</option>
@@ -84,7 +84,7 @@
         <div id="scoreBoard" class="result-header" style="display:none;">
             <div style="font-size: 1.3rem;">測驗結束</div>
             <div style="font-size: 3rem; font-weight: bold; color: var(--brand);" id="finalScoreText">0</div>
-            <div id="scoreDetailText" style="font-size: 18px;">正確 0 | 錯誤 0</div>
+            <div id="scoreDetailText" style="font-size: 18px;">答對：0 題 | 答錯：0 題</div>
             <button class="btn" style="margin-top:15px; background:var(--brand); color:#000; width:80%;" onclick="location.reload()">重新測驗</button>
         </div>
 
@@ -130,12 +130,24 @@ async function fetchAndParse(name) {
                 opts = [raw.A, raw.B, raw.C, raw.D].filter(Boolean);
             }
 
-            let ans = -1;
+            let exp = raw.analysis || raw.explanation || raw.e || "無解析";
             let rawAns = raw.answer !== undefined ? raw.answer : raw.c;
-            
-            // 修正：如果 JSON 中的 answer 是從 1 開始 (1=選項1, 2=選項2)，則減 1 轉為 0-based 索引
-            if (rawAns !== undefined && rawAns !== null) {
+            let ans = -1;
+
+            // 1. 先嘗試從解析文字（例如："答案為 (1) 是"）精準判斷正確選項
+            if (exp) {
+                let match = exp.match(/答案為\s*\(?([1-4A-Da-d])\)?/);
+                if (match) {
+                    let aStr = match[1].toUpperCase();
+                    if (!isNaN(aStr)) ans = parseInt(aStr, 10) - 1;
+                    else if (["A","B","C","D"].includes(aStr)) ans = {"A":0,"B":1,"C":2,"D":3}[aStr];
+                }
+            }
+
+            // 2. 如果解析沒寫出答案，再依 rawAns 做邏輯轉換 (處理 1-based vs 0-based)
+            if (ans === -1 && rawAns !== undefined && rawAns !== null) {
                 if (typeof rawAns === 'number') {
+                    // 如果數字大於等於 1 且小於等於選項數，代表是 1-based，需減 1
                     ans = (rawAns >= 1 && rawAns <= opts.length) ? rawAns - 1 : rawAns;
                 } else if (typeof rawAns === 'string') {
                     let upper = rawAns.trim().toUpperCase();
@@ -153,8 +165,6 @@ async function fetchAndParse(name) {
                 type = (opts.length === 2) ? 'tf' : 'choice';
             }
 
-            let exp = raw.analysis || raw.explanation || raw.e || "無解析";
-
             if (qText && opts.length >= 2 && ans >= 0 && ans < opts.length) {
                 temp.push({ q: qText, opts: opts, ans: ans, exp: exp, type: type });
             }
@@ -163,6 +173,7 @@ async function fetchAndParse(name) {
         const countMode = document.getElementById('quizCountSelect').value;
 
         if (countMode === 'procurement_std') {
+            // 🏛️ 採購班標準模式：66 題是非題 + 132 題選擇題
             let tfList = temp.filter(item => item.type === 'tf').sort(() => Math.random() - 0.5);
             let choiceList = temp.filter(item => item.type === 'choice').sort(() => Math.random() - 0.5);
 
@@ -258,12 +269,36 @@ function move(step) {
 function submitExam() {
     if (!confirm("確定交卷嗎？")) return;
     isFinished = true;
-    let correct = 0;
-    bank.forEach((it, i) => { if (answers[i] === it.ans) correct++; });
-    const score = Math.round((correct / bank.length) * 100);
+    
+    let correctCount = 0;
+    let totalScore = 0;
+    let maxPossibleScore = 0;
+
+    const countMode = document.getElementById('quizCountSelect').value;
+
+    bank.forEach((it, i) => {
+        const isCorrect = (answers[i] === it.ans);
+        if (isCorrect) correctCount++;
+
+        // 採購班標準計分法 (是非題 1 分，選擇題 2 分)
+        if (countMode === 'procurement_std') {
+            const point = (it.type === 'tf') ? 1 : 2;
+            maxPossibleScore += point;
+            if (isCorrect) totalScore += point;
+        }
+    });
+
     document.getElementById('scoreBoard').style.display = "block";
-    document.getElementById('finalScoreText').textContent = score + " 分";
-    document.getElementById('scoreDetailText').textContent = `答對：${correct} 題 | 答錯：${bank.length - correct} 題 (總題數：${bank.length} 題)`;
+    
+    if (countMode === 'procurement_std') {
+        const isPass = totalScore >= 231;
+        document.getElementById('finalScoreText').innerHTML = `${totalScore} <span style="font-size:1.5rem; color:#fff;">/ ${maxPossibleScore} 分</span><br><span style="font-size:1.2rem; color:${isPass ? '#4ade80' : '#fb7185'};">${isPass ? '🎉 及格 (達 231 分門檻)' : '❌ 未及格 (需達 231 分)'}</span>`;
+    } else {
+        const percentage = Math.round((correctCount / bank.length) * 100);
+        document.getElementById('finalScoreText').textContent = percentage + " 分";
+    }
+
+    document.getElementById('scoreDetailText').textContent = `答對：${correctCount} 題 | 答錯：${bank.length - correctCount} 題 (總題數：${bank.length} 題)`;
     document.getElementById('finishBtn').style.display = "none";
     current = 0;
     render();
