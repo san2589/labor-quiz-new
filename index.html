@@ -25,13 +25,13 @@
         /* 題目顯示加強 */
         h3 { font-size: 1.3rem; line-height: 1.4; margin-top: 5px; color: #fff; border-bottom: 1px solid #334155; padding-bottom: 15px; }
         
-        /* 選項按鈕加強 - 適合大拇指點擊 */
+        /* 選項按鈕加強 */
         .opt { width:100%; text-align:left; padding:18px; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; margin-bottom:12px; cursor:pointer; font-size: 18px; font-weight: 500; }
         .opt.selected { border-color:var(--brand); background:rgba(45,212,191,0.1); }
         .opt.correct { background:rgba(34,197,94,0.3) !important; border-color:#22c55e !important; color:#4ade80; }
         .opt.wrong { background:rgba(251,113,133,0.3) !important; border-color:#fb7185 !important; color:#fda4af; }
         
-        /* 題號網格優化 - 5欄排列 */
+        /* 題號網格 */
         .nav-grid { display:grid; grid-template-columns: repeat(5, 1fr); gap:10px; margin-top:10px; max-height: 400px; overflow-y: auto; padding-right: 5px; }
         .dot { background:#0f172a; border:1px solid #334155; text-align:center; padding:12px 0; border-radius:8px; cursor:pointer; font-size:16px; font-weight: bold; }
         .dot.active { border-color:var(--brand); color:var(--brand); border-width: 2px; }
@@ -132,13 +132,15 @@ async function fetchAndParse(name) {
 
             let ans = -1;
             let rawAns = raw.answer !== undefined ? raw.answer : raw.c;
+            
+            // 修正：答案邏輯直接對應 0-based 索引 (0=選項1, 1=選項2, 2=選項3, 3=選項4)
             if (rawAns !== undefined && rawAns !== null) {
                 if (typeof rawAns === 'number') {
-                    ans = rawAns > 0 ? rawAns - 1 : rawAns;
+                    ans = rawAns;
                 } else if (typeof rawAns === 'string') {
                     let upper = rawAns.trim().toUpperCase();
                     if (!isNaN(upper)) {
-                        ans = parseInt(upper) - 1;
+                        ans = parseInt(upper);
                     } else if (["A", "B", "C", "D"].includes(upper)) {
                         ans = {"A":0, "B":1, "C":2, "D":3}[upper];
                     }
@@ -174,13 +176,11 @@ async function fetchAndParse(name) {
             return;
         }
 
-        // 根據「測驗題數選單」決定抽樣數量
+        // 根據「測驗題數選單」決定題數
         const countMode = document.getElementById('quizCountSelect').value;
         if (countMode === 'all') {
-            // [全部題目] 模式：載入所有符合篩選條件的題目
             bank = filtered;
         } else {
-            // 隨機抽樣指定題數（50 或 100 題）
             const maxCount = parseInt(countMode, 10);
             bank = filtered.sort(() => Math.random() - 0.5).slice(0, maxCount);
         }
