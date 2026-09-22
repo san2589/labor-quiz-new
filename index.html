@@ -133,13 +133,15 @@ async function fetchAndParse(name) {
             let ans = -1;
             let rawAns = raw.answer !== undefined ? raw.answer : raw.c;
             
+            // 修正：如果 JSON 中的 answer 是從 1 開始 (1=選項1, 2=選項2)，則減 1 轉為 0-based 索引
             if (rawAns !== undefined && rawAns !== null) {
                 if (typeof rawAns === 'number') {
-                    ans = rawAns;
+                    ans = (rawAns >= 1 && rawAns <= opts.length) ? rawAns - 1 : rawAns;
                 } else if (typeof rawAns === 'string') {
                     let upper = rawAns.trim().toUpperCase();
                     if (!isNaN(upper)) {
-                        ans = parseInt(upper);
+                        let parsedNum = parseInt(upper, 10);
+                        ans = (parsedNum >= 1 && parsedNum <= opts.length) ? parsedNum - 1 : parsedNum;
                     } else if (["A", "B", "C", "D"].includes(upper)) {
                         ans = {"A":0, "B":1, "C":2, "D":3}[upper];
                     }
@@ -153,7 +155,7 @@ async function fetchAndParse(name) {
 
             let exp = raw.analysis || raw.explanation || raw.e || "無解析";
 
-            if (qText && opts.length >= 2 && ans >= 0) {
+            if (qText && opts.length >= 2 && ans >= 0 && ans < opts.length) {
                 temp.push({ q: qText, opts: opts, ans: ans, exp: exp, type: type });
             }
         });
@@ -161,7 +163,6 @@ async function fetchAndParse(name) {
         const countMode = document.getElementById('quizCountSelect').value;
 
         if (countMode === 'procurement_std') {
-            // 🏛️ 採購班標準模式：66 題是非題 + 132 題選擇題
             let tfList = temp.filter(item => item.type === 'tf').sort(() => Math.random() - 0.5);
             let choiceList = temp.filter(item => item.type === 'choice').sort(() => Math.random() - 0.5);
 
@@ -180,7 +181,6 @@ async function fetchAndParse(name) {
                 alert(`提醒：現有題庫數量不足（是非題 ${selectedTF.length}/66 題，選擇題 ${selectedChoice.length}/132 題），已載入最大可用題數！`);
             }
         } else {
-            // 根據選單類型過濾題目
             const selectedType = document.getElementById('quizTypeSelect').value;
             let filtered = temp.filter(item => {
                 switch (selectedType) {
